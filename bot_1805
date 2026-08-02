@@ -1,0 +1,57 @@
+const http = require('http');
+http.createServer((req,res)=>res.end('NDP Guard Live')).listen(process.env.PORT||3000);
+
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
+const pino = require('pino');
+const fs = require('fs');
+
+const PHONE = "917003197209";
+
+async function start() {
+    // delete old bad auth so fresh code comes
+    if (fs.existsSync('./auth/creds.json') && fs.statSync('./auth/creds.json').size < 500) {
+        fs.rmSync('./auth', {recursive:true, force:true});
+        console.log('Cleared bad auth');
+    }
+
+    const { state, saveCreds } = await useMultiFileAuthState('auth');
+    const { version } = await fetchLatestBaileysVersion();
+    console.log('Baileys version:', version);
+
+    const sock = makeWASocket({
+        version,
+        auth: state,
+        logger: pino({level:'silent'}),
+        browser: ['Chrome (Linux)', 'Chrome', ''],
+        printQRInTerminal: false
+    });
+
+    sock.ev.on('creds.update', saveCreds);
+
+    if (!sock.authState.creds.registered) {
+        console.log('Waiting 6 sec to request pairing code...');
+        await new Promise(r=>setTimeout(r,6000));
+        try {
+            let code = await sock.requestPairingCode(PHONE);
+            code = code.match(/.{1,4}/g).join('-');
+            console.log('\n\n============================================');
+            console.log(`   PAIRING CODE FOR ${PHONE}: ${code}`);
+            console.log('============================================\n');
+            console.log('Enter this in WhatsApp > Linked Devices > Link with phone number');
+        } catch(e) {
+            console.log('Pairing error:', e.message);
+            console.log('Retrying in 5 sec... deploy again if needed');
+        }
+    }
+
+    sock.ev.on('connection.update', ({connection, lastDisconnect})=>{
+        if(connection==='close'){
+            const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
+            console.log('Connection closed. Reconnect?', shouldReconnect);
+            if(shouldReconnect) setTimeout(start, 3000);
+        } else if(connection==='open'){
+            console.log('✅✅✅ CONNECTED SUCCESSFULLY ✅✅✅');
+        }
+    });
+}
+start();
