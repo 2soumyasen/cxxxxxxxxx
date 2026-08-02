@@ -1,0 +1,13 @@
+{
+  "name": "ndp-guardrail-bot",
+  "version": "1.0.0",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.22",
+    "qrcode-terminal": "^0.12.0",
+    "pino": "^8.17.0"
+  }
+}
